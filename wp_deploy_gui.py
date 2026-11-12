@@ -521,7 +521,7 @@ class App(tk.Tk):
         def cb(line):
             self.log_queue.put(line)
         try:
-            return run_deploy(job["ip"], port, job["ssh_user"], auth, job, cb, diag_dir=app_dir())
+            return run_deploy(job["ip"], port, job["ssh_user"], auth, job, cb)
         finally:
             self.active_domains.discard(job["domain"])
 
