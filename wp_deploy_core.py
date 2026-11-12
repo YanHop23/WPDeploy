@@ -865,8 +865,8 @@ def _investigate(connect_kwargs: dict, runner: str, domain: str, facts: dict, lo
         client.close()
 
 
-def _report_failure(connect_kwargs, runner, domain, facts, lines, diag_dir, log) -> None:
-    """Collect evidence, log the conclusions and save everything to a file.
+def _report_failure(connect_kwargs, runner, domain, facts, log) -> None:
+    """Collect evidence and log the conclusions.
     Never raises: a diagnostics problem must not hide the original failure."""
     try:
         if not facts.get("unreachable"):
@@ -874,32 +874,20 @@ def _report_failure(connect_kwargs, runner, domain, facts, lines, diag_dir, log)
         log(f"[{domain}] ===== ВИСНОВОК ДІАГНОСТИКИ =====")
         for conclusion in diagnose_failure(facts):
             log(f"[{domain}] >>> {conclusion}")
-        if diag_dir:
-            stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            path = os.path.join(diag_dir, f"diag_{slugify(domain)}_{stamp}.log")
-            log(f"[{domain}] Diagnostics report saved: {path}")
-            with open(path, "w", encoding="utf-8") as f:
-                f.write("\n".join(lines) + "\n")
     except Exception as e:
         log(f"[{domain}] Diagnostics failed: {e}")
 
 
-def run_deploy(host: str, port: int, ssh_user: str, auth: dict, job: dict, log_cb,
-               diag_dir: str = None):
+def run_deploy(host: str, port: int, ssh_user: str, auth: dict, job: dict, log_cb):
     """
     auth: {"method": "password", "password": "..."} or
           {"method": "key", "key_path": "...", "passphrase": "..."}
     log_cb: callable(str) called with each line of output (and status lines).
-    diag_dir: where a failure report is saved (not saved if None).
     Raises on connection/auth failure; returns True on 'DEPLOY_OK' marker found,
     False otherwise. Failures other than bad credentials are investigated first.
     """
-    lines = []
-
     def log(msg):
-        stamped = f"{datetime.datetime.now():%H:%M:%S} {msg}"
-        lines.append(stamped)
-        log_cb(stamped)
+        log_cb(f"{datetime.datetime.now():%H:%M:%S} {msg}")
 
     connect_kwargs = dict(hostname=host, port=port, username=ssh_user, timeout=20,
                           banner_timeout=60, auth_timeout=60)
@@ -923,10 +911,10 @@ def run_deploy(host: str, port: int, ssh_user: str, auth: dict, job: dict, log_c
         if not facts.get("connected"):
             facts["unreachable"] = True
             facts["probe"] = _probe_ssh(host, port, lambda m: log(f"[{domain}] {m}"))
-        _report_failure(connect_kwargs, runner, domain, facts, lines, diag_dir, log)
+        _report_failure(connect_kwargs, runner, domain, facts, log)
         raise
     if not ok:
-        _report_failure(connect_kwargs, runner, domain, facts, lines, diag_dir, log)
+        _report_failure(connect_kwargs, runner, domain, facts, log)
     return ok
 
 
