@@ -928,7 +928,7 @@ def _deploy_over_ssh(host, port, ssh_user, job, connect_kwargs, runner, facts, l
     # Without keepalives a server that dies mid-run leaves the job "running"
     # forever, because the read loop below never sees the connection drop.
     client.get_transport().set_keepalive(30)
-    log_cb(f"[{job['domain']}] Connected.")
+    log_cb(f"[{job['domain']}] Connected to {host}:{port}.")
 
     theme_zip_path = job.get("theme_zip_path")
     if theme_zip_path:
