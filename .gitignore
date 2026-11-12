@@ -1,0 +1,10 @@
+# Diagnostic logs (may contain server details)
+*.log
+
+# Plaintext passwords — never commit
+credentials.txt
+*.csv
+
+# Python
+__pycache__/
+*.pyc
