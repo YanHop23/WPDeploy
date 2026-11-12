@@ -88,9 +88,8 @@ This file accumulates across runs — treat it like a password vault.
 ## Failure diagnostics
 
 If a deploy fails (other than on wrong credentials), the program reconnects to
-the server, collects evidence, logs a conclusion after `ВИСНОВОК ДІАГНОСТИКИ`
-and saves the whole log next to the program as `diag_<domain>_<time>.log`.
-Read that file before attaching it to a support ticket.
+the server, collects evidence and logs a conclusion after `ВИСНОВОК ДІАГНОСТИКИ`
+in the Log panel.
 
 Each run also leaves `/var/log/wp_deploy_diag.log` on the server: a timeline of
 steps plus memory, CPU steal and I/O wait samples every 5 seconds. The previous
