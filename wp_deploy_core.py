@@ -190,7 +190,9 @@ sec Last apt terminal log; tail -n 30 /var/log/apt/term.log 2>/dev/null
 #   * add-apt-repository needs api.launchpad.net; on some hosts that times out
 #     (Python traceback, nothing added) -> add ppa:ondrej/php by hand with its
 #     signing key from keyserver.ubuntu.com, over IPv4;
-#   * the newest Ubuntu releases have no suite in the PPA -> packages.sury.org;
+#   * the PPA is deprecated: for the newest Ubuntu releases it has no suite,
+#     or an empty one (resolute/26.04) -> packages.sury.org, which also takes
+#     over when the PPA is already configured but still has no php<ver>;
 #   * never continue (and never touch Apache) unless php<ver> is really
 #     installable - otherwise Apache ends up with no PHP module at all;
 #   * leave exactly one mod_php enabled (an older one, e.g. Ubuntu's own 8.1,
@@ -217,24 +219,29 @@ add_ondrej_manual() {
   echo "ondrej/php added by hand (/etc/apt/sources.list.d/ondrej-php.list)."
 }
 php_available() { apt-cache policy "php$PHPV-cli" 2>/dev/null | grep -qE 'Candidate: [0-9]'; }
+# The PPA can publish a suite with no packages in it (resolute/26.04 did), so
+# check for php<ver>-cli itself, not just that the suite's Release file exists.
+ppa_has_php() {
+  curl -4 -fsSL -m 30 "https://ppa.launchpadcontent.net/ondrej/php/ubuntu/dists/$VERSION_CODENAME/main/binary-$(dpkg --print-architecture)/Packages.gz" 2>/dev/null \
+    | gunzip 2>/dev/null | grep -q "^Package: php$PHPV-cli\$"
+}
+use_sury() {
+  rm -f /etc/apt/sources.list.d/ondrej-ubuntu-php-*.list /etc/apt/sources.list.d/ondrej-ubuntu-php-*.sources \
+        /etc/apt/sources.list.d/ondrej-php.list
+  if ! grep -rqs 'packages.sury.org' /etc/apt/sources.list /etc/apt/sources.list.d/; then
+    curl -4 -fsSL -m 60 -o /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg
+    printf 'Types: deb\nURIs: https://packages.sury.org/php/\nSuites: %s\nComponents: main\nSigned-By: /usr/share/keyrings/deb.sury.org-php.gpg\n' \
+      "$VERSION_CODENAME" > /etc/apt/sources.list.d/php.sources
+  fi
+}
+sury_configured() { grep -rqs 'packages.sury.org' /etc/apt/sources.list /etc/apt/sources.list.d/; }
 
 if php_available; then
   echo "PHP $PHPV packages are already available."
 else
-  USE_SURY=0
-  if [ -n "${VERSION_CODENAME:-}" ] && ! curl -4 -fsI -m 30 \
-      "https://ppa.launchpadcontent.net/ondrej/php/ubuntu/dists/$VERSION_CODENAME/Release" >/dev/null 2>&1; then
-    USE_SURY=1
-  fi
-  if [ "$USE_SURY" = 1 ]; then
-    echo "ppa:ondrej/php has no '$VERSION_CODENAME' release - using packages.sury.org instead."
-    rm -f /etc/apt/sources.list.d/ondrej-ubuntu-php-*.list /etc/apt/sources.list.d/ondrej-ubuntu-php-*.sources \
-          /etc/apt/sources.list.d/ondrej-php.list
-    if ! grep -rqs 'packages.sury.org' /etc/apt/sources.list /etc/apt/sources.list.d/; then
-      curl -4 -fsSL -m 60 -o /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg
-      printf 'Types: deb\nURIs: https://packages.sury.org/php/\nSuites: %s\nComponents: main\nSigned-By: /usr/share/keyrings/deb.sury.org-php.gpg\n' \
-        "$VERSION_CODENAME" > /etc/apt/sources.list.d/php.sources
-    fi
+  if [ -n "${VERSION_CODENAME:-}" ] && ! ppa_has_php; then
+    echo "ppa:ondrej/php has no PHP $PHPV for '$VERSION_CODENAME' - using packages.sury.org instead."
+    use_sury
   elif ! grep -rqs 'ondrej' /etc/apt/sources.list /etc/apt/sources.list.d/; then
     echo "Adding the ondrej/php repository..."
     AAR_RC=0
@@ -248,8 +255,15 @@ else
     fi
   fi
   apt_retry update -y $APT_RELEASEINFO_OK || echo "WARNING: apt-get update reported errors - continuing."
+  # ondrej/php is deprecated in favour of packages.sury.org: if it still has
+  # no php<ver> (e.g. it was added on an earlier run), switch over and retry.
+  if ! php_available && [ -n "${VERSION_CODENAME:-}" ] && ! sury_configured; then
+    echo "PHP $PHPV is still not available from ondrej/php - switching to packages.sury.org."
+    use_sury
+    apt_retry update -y $APT_RELEASEINFO_OK || echo "WARNING: apt-get update reported errors - continuing."
+  fi
   if ! php_available; then
-    echo "PHP_REPO_FAILED: no PHP $PHPV packages are available (ondrej/php not reachable from this server?)."
+    echo "PHP_REPO_FAILED: no PHP $PHPV packages are available (neither ondrej/php nor packages.sury.org has them for this server?)."
     apt-cache policy "php$PHPV-cli" 2>&1 | head -n 5 || true
     exit 1
   fi
