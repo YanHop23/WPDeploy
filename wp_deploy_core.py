@@ -247,7 +247,7 @@ else
       add_ondrej_manual
     fi
   fi
-  apt_retry update -y || echo "WARNING: apt-get update reported errors - continuing."
+  apt_retry update -y $APT_RELEASEINFO_OK || echo "WARNING: apt-get update reported errors - continuing."
   if ! php_available; then
     echo "PHP_REPO_FAILED: no PHP $PHPV packages are available (ondrej/php not reachable from this server?)."
     apt-cache policy "php$PHPV-cli" 2>&1 | head -n 5 || true
@@ -489,7 +489,13 @@ def build_script(job: dict) -> str:
         "unattended-upgrades.service >/dev/null 2>&1 || true",
         "systemctl mask apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true",
         _APT_RETRY,
-        "apt_retry update -y",
+        # Third-party repos sometimes rename themselves (ondrej/php became
+        # "PPA for PHP (deprecated)"), and apt-get update then fails with
+        # rc=100 until the change is accepted. Accept Label/Origin changes
+        # only; suite/codename changes still need a human.
+        "APT_RELEASEINFO_OK='-o Acquire::AllowReleaseInfoChange::Label=true "
+        "-o Acquire::AllowReleaseInfoChange::Origin=true'",
+        "apt_retry update -y $APT_RELEASEINFO_OK",
         # Some minimal cloud images ship with only the 'main' component
         # enabled, which is missing most PHP packages (they live in
         # 'universe') and can even make plain 'curl' look uninstallable.
