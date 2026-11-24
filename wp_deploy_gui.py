@@ -159,7 +159,7 @@ class App(tk.Tk):
 
         self.ai_enabled = tk.BooleanVar(value=bool(self.cfg.get("ai_enabled")))
         ttk.Checkbutton(
-            row2b, text="AI analysis of failures (Claude)", variable=self.ai_enabled,
+            row2b, text="AI analysis of failures", variable=self.ai_enabled,
             command=self._toggle_ai,
         ).pack(side="left")
 

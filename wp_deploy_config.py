@@ -25,9 +25,13 @@ DEFAULTS = {
     "credentials_file": "credentials.txt",
     # AI failure analysis (see wp_deploy_ai.py).
     "ai_enabled": True,
+    # "gemini" (has a free tier) or "claude" (paid).
+    "ai_provider": "gemini",
+    "gemini_model": "gemini-3.1-flash-lite",
     "ai_model": "claude-opus-5-5",
-    # Prefer the ANTHROPIC_API_KEY environment variable; this is a fallback
-    # for people who launch the .exe by double-click and have no env var.
+    # Prefer the GEMINI_API_KEY / ANTHROPIC_API_KEY environment variables;
+    # these are a fallback for launching the .exe by double-click.
+    "gemini_api_key": "",
     "anthropic_api_key": "",
 }
 
