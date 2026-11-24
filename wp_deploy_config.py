@@ -2,7 +2,7 @@
 Local settings that must never end up in git.
 
 Everything machine- or user-specific (where the themes live, where the
-credentials file goes, the Anthropic API key) is read from
+credentials file goes, the Gemini API key) is read from
 `config.local.json` next to the program. That file is gitignored; the
 committed `config.example.json` shows its shape.
 
@@ -25,14 +25,10 @@ DEFAULTS = {
     "credentials_file": "credentials.txt",
     # AI failure analysis (see wp_deploy_ai.py).
     "ai_enabled": True,
-    # "gemini" (has a free tier) or "claude" (paid).
-    "ai_provider": "gemini",
     "gemini_model": "gemini-3.1-flash-lite",
-    "ai_model": "claude-opus-5-5",
-    # Prefer the GEMINI_API_KEY / ANTHROPIC_API_KEY environment variables;
-    # these are a fallback for launching the .exe by double-click.
+    # Prefer the GEMINI_API_KEY environment variable; this is a fallback
+    # for launching the .exe by double-click.
     "gemini_api_key": "",
-    "anthropic_api_key": "",
 }
 
 

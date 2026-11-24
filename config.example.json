@@ -2,9 +2,6 @@
   "themes_dir": "C:\\path\\to\\your\\themes",
   "credentials_file": "credentials.txt",
   "ai_enabled": true,
-  "ai_provider": "gemini",
   "gemini_model": "gemini-3.1-flash-lite",
-  "ai_model": "claude-opus-5-5",
-  "gemini_api_key": "",
-  "anthropic_api_key": ""
+  "gemini_api_key": ""
 }
