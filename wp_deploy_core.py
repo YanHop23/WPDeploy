@@ -905,8 +905,8 @@ def _report_failure(connect_kwargs, runner, job, facts, log,
     if ai_cfg is None or facts.get("reconnect_error"):
         return
     try:
-        from wp_deploy_ai import analyze_failure
-        log(f"[{domain}] ===== ШІ-АНАЛІЗ (Claude) =====")
+        from wp_deploy_ai import analyze_failure, provider_name
+        log(f"[{domain}] ===== ШІ-АНАЛІЗ ({provider_name(ai_cfg)}) =====")
         for line in analyze_failure(ai_cfg, job, facts, conclusions, log_lines):
             log(f"[{domain}] AI> {line}")
     except Exception as e:
