@@ -1,0 +1,7 @@
+{
+  "themes_dir": "C:\\path\\to\\your\\themes",
+  "credentials_file": "credentials.txt",
+  "ai_enabled": true,
+  "ai_model": "claude-opus-5-5",
+  "anthropic_api_key": ""
+}

@@ -10,14 +10,19 @@ Run: python wp_deploy_gui.py   (requires: pip install paramiko)
 
 import csv
 import datetime
-import os
 import queue
-import sys
 import threading
 import tkinter as tk
 from concurrent.futures import ThreadPoolExecutor
 from tkinter import filedialog, messagebox, ttk
 
+from wp_deploy_ai import ai_available
+from wp_deploy_config import (
+    CONFIG_FILENAME,
+    load_config,
+    resolve_path,
+    save_config,
+)
 from wp_deploy_core import (
     append_credentials,
     find_theme_source,
@@ -39,20 +44,12 @@ ROLE_OPTIONS = [
     "Note (kept in results only)",
 ]
 
-DEFAULT_THEMES_DIR = r"C:\olegka\work\workingsites"
-
-
-def app_dir() -> str:
-    """Directory the program lives in (handles a frozen/exe build too)."""
-    if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
-
+# Placeholder rows showing the expected layout. Documentation IPs (RFC 5737)
+# and example.com domains only: real data belongs in your spreadsheet.
 EXAMPLE = (
-    "playbookopsin.com\twork\t\tiphoster regery\tGermany\tAlis Outlook 77\t"
-    "91.199.32.243\t\tpXe208BOI5ziDV\t\tkravchenkoyuliya12@outlook.com\n"
-    "proxyflowlab.com\twork\t\tmvps unstoppabledomains\tEngland\tDiana Farm Outlook 49\t"
-    "178.157.82.244\t\tAO1B7xiWA5j4uhMN0bPSmZDl\tMvsQa8avsuCeqX\tartem.demchenko@outlook.com"
+    "example-site.com\tGermany\t192.0.2.10\tssh-password-here\t\tadmin@example.com\n"
+    "another-site.org\tEngland\t198.51.100.20\tssh-password-here\twp-password-here\t"
+    "admin@example.org"
 )
 
 
@@ -68,6 +65,7 @@ class App(tk.Tk):
         self.log_queue = queue.Queue()
         self.results = []           # dicts for CSV export
         self.active_domains = set() # queued or running, to block double deploys
+        self.cfg = load_config()    # machine-local settings, never committed
 
         self._build_paste_area()
         self._build_mapping_area()
@@ -76,6 +74,11 @@ class App(tk.Tk):
         self._build_log_area()
 
         self._install_clipboard_fixes()
+
+        if self.cfg.get("_load_error"):
+            self.log(f"WARNING: could not read {self.cfg['_load_error']} — using defaults.")
+        ok, reason = ai_available(self.cfg)
+        self.log("AI failure analysis: " + ("ready." if ok else f"off ({reason})."))
 
         self.after(150, self._drain_log_queue)
 
@@ -148,9 +151,17 @@ class App(tk.Tk):
         row2b.pack(fill="x", padx=6, pady=3)
 
         ttk.Label(row2b, text="Themes folder (<domain>.zip or <domain>/ folder):").pack(side="left")
-        self.themes_dir = tk.StringVar(value=DEFAULT_THEMES_DIR)
+        self.themes_dir = tk.StringVar(value=self.cfg.get("themes_dir", ""))
         ttk.Entry(row2b, textvariable=self.themes_dir, width=40).pack(side="left", padx=(2, 4))
         ttk.Button(row2b, text="Browse...", command=self._browse_themes_dir).pack(side="left")
+        ttk.Label(row2b, text=f"(remembered in {CONFIG_FILENAME})",
+                  foreground="#666").pack(side="left", padx=(6, 12))
+
+        self.ai_enabled = tk.BooleanVar(value=bool(self.cfg.get("ai_enabled")))
+        ttk.Checkbutton(
+            row2b, text="AI analysis of failures (Claude)", variable=self.ai_enabled,
+            command=self._toggle_ai,
+        ).pack(side="left")
 
         row3 = ttk.Frame(frame)
         row3.pack(fill="x", padx=6, pady=3)
@@ -297,6 +308,20 @@ class App(tk.Tk):
         path = filedialog.askdirectory(title="Select themes folder")
         if path:
             self.themes_dir.set(path)
+            self._save_setting("themes_dir", path)
+
+    def _toggle_ai(self):
+        self._save_setting("ai_enabled", self.ai_enabled.get())
+        ok, reason = ai_available(self.cfg)
+        self.log("AI failure analysis: " + ("ready." if ok else f"off ({reason})."))
+
+    def _save_setting(self, key, value):
+        """Persist one setting to config.local.json (gitignored)."""
+        self.cfg[key] = value
+        try:
+            save_config(self.cfg)
+        except OSError as e:
+            self.log(f"WARNING: could not save {CONFIG_FILENAME}: {e}")
 
     def parse_rows(self):
         raw = self.paste_text.get("1.0", "end").strip("\n")
@@ -505,7 +530,8 @@ class App(tk.Tk):
                     self._set_status(idx, "done" if ok else "error")
                     self.results.append({**job, "success": ok})
                     if ok:
-                        creds_path = os.path.join(app_dir(), "credentials.txt")
+                        creds_path = resolve_path(
+                            self.cfg.get("credentials_file") or "credentials.txt")
                         try:
                             append_credentials(creds_path, job["domain"], job["wp_admin_password"])
                         except OSError as e:
@@ -521,7 +547,8 @@ class App(tk.Tk):
         def cb(line):
             self.log_queue.put(line)
         try:
-            return run_deploy(job["ip"], port, job["ssh_user"], auth, job, cb)
+            ai_cfg = self.cfg if self.ai_enabled.get() else None
+            return run_deploy(job["ip"], port, job["ssh_user"], auth, job, cb, ai_cfg=ai_cfg)
         finally:
             self.active_domains.discard(job["domain"])
 

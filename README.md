@@ -1,110 +1,110 @@
 # WP Remote Deploy
 
-Desktop GUI (Tkinter) that installs WordPress on remote Ubuntu servers over
-SSH, following the steps from the
-[Ubuntu WordPress tutorial](https://ubuntu.com/tutorials/install-and-configure-wordpress)
-(Apache + MySQL + PHP), but fully automated via [WP-CLI](https://wp-cli.org/)
-so no manual web install wizard is needed.
+Десктопна програма, яка ставить WordPress на чисті Ubuntu-сервери по SSH.
+Вставляєш таблицю з доменами та доступами, натискаєш **Deploy All**, і за
+кілька хвилин на кожному сервері працює сайт з HTTPS і потрібною темою.
 
-## Requirements
+## Навіщо це
 
-- Python 3.9+
-- `pip install -r requirements.txt` (installs `paramiko`)
-- Target server: fresh Ubuntu 22.04/24.04 with SSH access (root, or a sudo
-  user with passwordless sudo — see note below)
-- Port 80 (and 443 if you enable SSL) reachable from the internet if you want
-  the site publicly accessible
+Вручну один сайт піднімається приблизно так: зайти на сервер, поставити
+Apache, MySQL і PHP, створити базу, завантажити WordPress, пройти
+веб-інсталятор, залити тему, налаштувати vhost, отримати сертифікат. Коли
+таких сайтів десятки, це години одноманітної роботи й постійні помилки.
 
-## Usage
+Програма робить усе це сама і паралельно для кількох серверів. А коли
+щось ламається, вона сама з'ясовує, що сталося.
 
-1. `python wp_deploy_gui.py`
-2. Paste your rows (tab-separated — copy straight out of Excel/Google
-   Sheets/etc.) into the top box and click **Parse rows**.
-3. For each pasted column, pick its role from the dropdown (Domain, IP
-   Address, SSH Password, WP Admin Email, ...). Columns you don't need can
-   stay **Ignore**, or use **Note** to carry them through to the results
-   file for your own bookkeeping (e.g. registrar, persona name) without the
-   tool acting on them.
-4. Set SSH port / default username / auth method (password or key file).
-5. Point "Themes folder" at the directory holding per-site theme zips (default
-   `C:\olegka\work\workingsites`) — see **Themes** below.
-6. Click **Deploy All** (or select specific rows and **Deploy Selected**).
-   Progress streams into the Log panel; each row's status updates in the
-   table.
-7. Click **Export results CSV...** to save a full per-site record (including
-   DB passwords). WP admin passwords are also appended automatically to
-   `credentials.txt` next to the program — see **Credentials file** below.
-
-## What it does per server
-
-- `apt-get install` apache2, mysql-server, php + common extensions
-- Creates a dedicated MySQL database + user for the site (the username is
-  capped at MySQL's 32-character limit for long domains)
-- Installs WP-CLI if not already present
-- Downloads WordPress and runs `wp core install` non-interactively (site
-  title, admin email, locale guessed from a "Country" column if you map one).
-  **The WP admin login is always the site's domain name** (e.g.
-  `playbookopsin.com`); the password is either mapped from a column or
-  auto-generated.
-- If a matching `<domain>.zip` exists in the themes folder, uploads it over
-  SFTP, unzips it into `wp-content/themes/`, and activates it as the site's
-  theme (see **Themes** below). If no matching archive is found, the site
-  just keeps the default WP theme.
-- Writes an Apache vhost for the domain, enables it, reloads Apache
-- Opens the firewall for Apache if `ufw` is active
-- **Always requests a Let's Encrypt (certbot) certificate** — no checkbox,
-  no prompt. If the domain's DNS isn't pointed at the server yet, certbot
-  fails and logs `CERTBOT_FAILED`, but the rest of the install still
-  completes over plain HTTP; just point DNS and re-run certbot manually
-  later.
-
-## Themes
-
-For each site, put its theme in the themes folder as either:
-
-- a plain folder named exactly `<domain>` (e.g. `playbookopsin.com/`)
-  containing the theme files (`style.css`, `functions.php`, `index.php`,
-  ...) directly inside it — the tool zips it up on the fly before
-  uploading, or
-- a ready-made `<domain>.zip` (e.g. `playbookopsin.com.zip`) whose single
-  top-level folder contains those same files.
-
-If both exist for a domain, the zip takes priority. Either way, the theme
-is uploaded over SFTP, unzipped into `wp-content/themes/`, and activated
-with `wp theme activate`. A site with neither is left on the default
-WordPress theme.
-
-## Credentials file
-
-Every successfully deployed site appends one line to `credentials.txt`,
-created next to the program (the `.py`/`.exe`), in the form:
+## Як це працює
 
 ```
-domain.com - <wp admin password>
+таблиця (Excel / Google Sheets)
+        │  копіюєш рядки
+        ▼
+GUI (Tkinter) ──SSH/SFTP──► сервер Ubuntu
+                              ├─ apache2, mysql, php
+                              ├─ база й користувач MySQL
+                              ├─ WP-CLI → wp core install
+                              ├─ тема з <domain>.zip
+                              ├─ Apache vhost, ufw
+                              └─ Let's Encrypt (certbot)
+        │
+        └── якщо збій → діагностика (правила + ШІ)
 ```
 
-This file accumulates across runs — treat it like a password vault.
+Встановлення йде за кроками з
+[офіційного туторіалу Ubuntu](https://ubuntu.com/tutorials/install-and-configure-wordpress),
+але без ручних дій: WordPress ставиться через [WP-CLI](https://wp-cli.org/).
 
-## Failure diagnostics
+## Швидкий старт
 
-If a deploy fails (other than on wrong credentials), the program reconnects to
-the server, collects evidence and logs a conclusion after `ВИСНОВОК ДІАГНОСТИКИ`
-in the Log panel.
+```
+pip install -r requirements.txt
+copy config.example.json config.local.json
+python wp_deploy_gui.py
+```
 
-Each run also leaves `/var/log/wp_deploy_diag.log` on the server: a timeline of
-steps plus memory, CPU steal and I/O wait samples every 5 seconds. The previous
-run's copy is kept as `.prev`.
+1. Встав рядки з таблиці (через Tab) і натисни **Parse rows**.
+2. Для кожної колонки вибери, що в ній: Domain, IP Address, SSH Password,
+   WP Admin Email тощо. Непотрібні колонки залиш на **Ignore**.
+3. Вкажи папку з темами і натисни **Deploy All** (або **Deploy Selected**).
+4. Хід роботи видно в лозі, а статус кожного сайту в таблиці.
 
-## Security notes
+Що потрібно від сервера: свіжа Ubuntu 22.04/24.04 і SSH під root або під
+користувачем з sudo без пароля.
 
-- **`credentials.txt` and the exported results CSV contain plaintext
-  passwords.** Store them somewhere safe and delete them once you've copied
-  what you need elsewhere.
-- Prefer SSH key auth over password auth where possible.
-- If your SSH user isn't `root`, the script runs via `sudo -H bash -s` — that
-  requires the user to be able to `sudo` without an interactive password
-  prompt (e.g. listed in `/etc/sudoers.d/` with `NOPASSWD:ALL`), otherwise
-  the deploy will hang waiting for a password that never comes.
-- The tool trusts whatever host key the server presents on first connect
-  (`AutoAddPolicy`) for convenience with freshly-provisioned servers. If you
-  need strict host-key verification, edit `wp_deploy_core.py` accordingly.
+## Коли деплой падає
+
+Це найцікавіша частина. Сервери бувають слабкі, перевантажені або просто
+глючні, тому програма не обмежується повідомленням «помилка», а розбирається:
+
+1. **Збирає докази.** Під час встановлення на сервері пише
+   `/var/log/wp_deploy_diag.log`: кроки, вільну пам'ять, CPU steal, I/O wait
+   кожні 5 секунд. Після збою програма заходить на сервер повторно й забирає
+   цей лог, лічильники OOM, boot_id і стан dpkg.
+2. **Робить висновок за правилами.** Чи був OOM, чи перезавантажився сервер,
+   чи вбили скрипт, чи обірвався SSH. У лозі це блок `ВИСНОВОК ДІАГНОСТИКИ`.
+3. **Питає ШІ.** Ті самі докази й останні ~300 рядків логу йдуть у Claude, і
+   він відповідає в блоці `ШІ-АНАЛІЗ (Claude)`: причина, докази, конкретні
+   команди, впевненість і чи варто писати тікет хостеру.
+
+Правила йдуть першими, бо вони швидкі, безкоштовні й точні для відомих
+випадків. ШІ допомагає там, де правила не дають однозначної відповіді.
+
+**Перед відправкою в ШІ всі паролі, email-и, IP та домени замінюються на
+плейсхолдери**, тож на сервери API потрапляють лише знеособлені технічні дані.
+Без `ANTHROPIC_API_KEY` програма працює так само, просто без ШІ-блоку.
+
+## Налаштування
+
+Усе, що стосується конкретного комп'ютера, лежить у `config.local.json`.
+Цей файл у `.gitignore`, тому шляхи та ключі не потрапляють у репозиторій.
+
+| Ключ | Що це |
+|---|---|
+| `themes_dir` | Папка з темами. Можна вибрати в програмі, вона запам'ятає. |
+| `credentials_file` | Куди дописувати паролі адмінів WP. |
+| `ai_enabled` | Увімкнути чи вимкнути ШІ-аналіз (є також чекбокс у програмі). |
+| `ai_model` | Модель Claude, за замовчуванням `claude-opus-5-5`. |
+| `anthropic_api_key` | Запасний варіант. Краще задати змінну `ANTHROPIC_API_KEY`. |
+
+**Теми.** Для кожного сайту поклади в папку тем `<domain>.zip` або папку
+`<domain>/` з файлами теми (`style.css`, `functions.php`...). Програма
+завантажить її і активує. Якщо теми немає, лишиться стандартна.
+
+## Безпека
+
+- `credentials.txt` та експортований CSV містять паролі відкритим текстом.
+  Тримай їх як сховище паролів, у git вони не потрапляють.
+- Краще використовувати SSH-ключ, а не пароль.
+- Ключ хоста сервера приймається автоматично (`AutoAddPolicy`), бо сервери
+  щойно створені. Для суворої перевірки це місце треба змінити в
+  `wp_deploy_core.py`.
+
+## Структура
+
+| Файл | Що робить |
+|---|---|
+| `wp_deploy_gui.py` | Інтерфейс: таблиця, мапінг колонок, лог, паралельний запуск. |
+| `wp_deploy_core.py` | SSH, bash-скрипт встановлення, збір доказів, діагностика за правилами. |
+| `wp_deploy_ai.py` | ШІ-аналіз збоїв і знеособлення даних перед відправкою. |
+| `wp_deploy_config.py` | Читання та збереження локального `config.local.json`. |
