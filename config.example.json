@@ -1,0 +1,7 @@
+{
+  "themes_dir": "C:\\path\\to\\your\\themes",
+  "credentials_file": "credentials.txt",
+  "ai_enabled": true,
+  "gemini_model": "gemini-3.1-flash-lite",
+  "gemini_api_key": ""
+}

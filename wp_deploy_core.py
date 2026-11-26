@@ -4,6 +4,7 @@ WordPress tutorial: https://ubuntu.com/tutorials/install-and-configure-wordpress
 and runs it over SSH via paramiko, streaming output back through a callback.
 """
 
+import collections
 import datetime
 import os
 import posixpath
@@ -885,28 +886,47 @@ def _investigate(connect_kwargs: dict, runner: str, domain: str, facts: dict, lo
         client.close()
 
 
-def _report_failure(connect_kwargs, runner, domain, facts, log) -> None:
-    """Collect evidence and log the conclusions.
+def _report_failure(connect_kwargs, runner, job, facts, log,
+                    ai_cfg=None, log_lines=()) -> None:
+    """Collect evidence and log the conclusions: rules first, then (if
+    configured) an AI second opinion on the same evidence plus the log tail.
     Never raises: a diagnostics problem must not hide the original failure."""
+    domain = job["domain"]
     try:
         if not facts.get("unreachable"):
             _investigate(connect_kwargs, runner, domain, facts, log)
         log(f"[{domain}] ===== ВИСНОВОК ДІАГНОСТИКИ =====")
-        for conclusion in diagnose_failure(facts):
+        conclusions = diagnose_failure(facts)
+        for conclusion in conclusions:
             log(f"[{domain}] >>> {conclusion}")
     except Exception as e:
         log(f"[{domain}] Diagnostics failed: {e}")
+        return
+    if ai_cfg is None or facts.get("reconnect_error"):
+        return
+    try:
+        from wp_deploy_ai import analyze_failure
+        log(f"[{domain}] ===== ШІ-АНАЛІЗ (Gemini) =====")
+        for line in analyze_failure(ai_cfg, job, facts, conclusions, log_lines):
+            log(f"[{domain}] AI> {line}")
+    except Exception as e:
+        log(f"[{domain}] AI analysis failed: {e}")
 
 
-def run_deploy(host: str, port: int, ssh_user: str, auth: dict, job: dict, log_cb):
+def run_deploy(host: str, port: int, ssh_user: str, auth: dict, job: dict, log_cb,
+               ai_cfg=None):
     """
     auth: {"method": "password", "password": "..."} or
           {"method": "key", "key_path": "...", "passphrase": "..."}
     log_cb: callable(str) called with each line of output (and status lines).
+    ai_cfg: settings dict for the AI failure analysis, or None to skip it.
     Raises on connection/auth failure; returns True on 'DEPLOY_OK' marker found,
     False otherwise. Failures other than bad credentials are investigated first.
     """
+    log_lines = collections.deque(maxlen=500)  # tail handed to the AI analysis
+
     def log(msg):
+        log_lines.append(msg)
         log_cb(f"{datetime.datetime.now():%H:%M:%S} {msg}")
 
     connect_kwargs = dict(hostname=host, port=port, username=ssh_user, timeout=20,
@@ -931,10 +951,10 @@ def run_deploy(host: str, port: int, ssh_user: str, auth: dict, job: dict, log_c
         if not facts.get("connected"):
             facts["unreachable"] = True
             facts["probe"] = _probe_ssh(host, port, lambda m: log(f"[{domain}] {m}"))
-        _report_failure(connect_kwargs, runner, domain, facts, log)
+        _report_failure(connect_kwargs, runner, job, facts, log, ai_cfg, log_lines)
         raise
     if not ok:
-        _report_failure(connect_kwargs, runner, domain, facts, log)
+        _report_failure(connect_kwargs, runner, job, facts, log, ai_cfg, log_lines)
     return ok
 
 

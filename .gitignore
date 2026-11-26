@@ -8,3 +8,6 @@ credentials.txt
 # Python
 __pycache__/
 *.pyc
+
+# Machine-local settings (themes path, API key) — copy config.example.json
+config.local.json
