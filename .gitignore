@@ -11,3 +11,8 @@ __pycache__/
 
 # Machine-local settings (themes path, API key) — copy config.example.json
 config.local.json
+
+DomainReplace.py
+
+# Raw screenshots (may show servers/passwords) — crop into docs/ first
+image_*.png
