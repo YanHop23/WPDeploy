@@ -13,3 +13,6 @@ __pycache__/
 config.local.json
 
 DomainReplace.py
+
+# Raw screenshots (may show servers/passwords) — crop into docs/ first
+image_*.png
